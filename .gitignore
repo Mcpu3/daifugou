@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+!libplayingcards.a
+!libplayingcards-for-mac.a
