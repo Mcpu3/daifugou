@@ -15,6 +15,7 @@
 #include "simpleplayer.h"
 #include "defaultplayer.h"
 #include "thinkTA1.h"
+#include "group5.h"
 #include "dealer.h"
 
 void registerPlayers(Dealer & d) {
@@ -23,6 +24,7 @@ void registerPlayers(Dealer & d) {
     d.regist(new  SimplePlayer("Simple1 ")); 
     d.regist(new  SimplePlayer("Simple2 ")); 
     d.regist(new      ThinkTA1("ThinkTA1")); 
+    d.regist(new        Group5("Group5  ")); 
 }
 
 int main (int argc, char * const argv[]) {

@@ -6,8 +6,8 @@ CFLAGS   = -Wall -g
 CXXFLAGS = -Wall -g
 
 HEADERS = card.h cardset.h dealer.h gamestatus.h player.h \
-          simpleplayer.h defaultplayer.h thinkTA1.h 
-OBJS = dealer.o player.o simpleplayer.o defaultplayer.o
+          simpleplayer.h defaultplayer.h thinkTA1.h group5.h
+OBJS = dealer.o player.o simpleplayer.o defaultplayer.o group5.o
 
 .SUFFIXES: .o .cc .cpp .c++ .c
 
