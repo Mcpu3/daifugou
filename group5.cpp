@@ -15,8 +15,8 @@ using namespace std;
 
 void Group5::ready() {
     dealer = Group5Dealer();
-    dealer.regist(new Group5("Me"));
-    dealer.regist(new Group5("Enemy"));
+    dealer.regist(Group5("Me"));
+    dealer.regist(Group5("Enemy"));
     dealer.newGame();
     passed = true;
     npass = 0;
@@ -36,7 +36,7 @@ void Group5::ready() {
 
 bool Group5::follow(const GameStatus &gstat, CardSet &cs) {
     vector<pair<CardSet, long double>> cardsetsAndCosts;
-    const vector<CardSet> followableCardset = getFollowableCardsets(gstat, hand);
+    const vector<CardSet> followableCardset = getFollowableCardsets(gstat, hand, false);
     for (const CardSet &cardSet : followableCardset) {
         cardsetsAndCosts.emplace_back(cardSet, 0.0);
     }
@@ -81,11 +81,17 @@ bool Group5::approve(const GameStatus &gstat) {
 }
 
 long double Group5::beamSearch(Group5Dealer dealer, CardSet opened, bool passed, int npass, const int &depth) {
+    // if (depth >= 50) {
+    //     return evaluate(dealer.gameStatus()) + depth;
+    // }
     if (npass >= dealer.howManyPlayers() * 5) {
-        return 0.0;
+        return evaluate(dealer.gameStatus());
     }
     if (passed && dealer.playerInTurnIsLeader()) {
         dealer.clearDiscardPile();
+    }
+    for (int i = 0; i < opened.size(); i++) {
+        dealer.playerInTurn().inHand().remove(opened.at(i));
     }
     if (opened.isEmpty() || !dealer.accept(opened)) {
         if (!opened.isEmpty()) {
@@ -98,24 +104,33 @@ long double Group5::beamSearch(Group5Dealer dealer, CardSet opened, bool passed,
         passed = false;
     }
     if (dealer.playerInTurn().isEmptyHanded() && dealer.isEmptyHanded(dealer.playerInTurn().getId())) {
-        if (npass >= dealer.howManyPlayers() * 5) {
-            return 0.0;
-        }
-        return evaluate(dealer.gameStatus());
+        // if (dealer.playerInTurn().getName() == "Me") {
+        //     return depth;
+        // }
+        // else {
+        //     return 0;
+        // }
+        return evaluate(dealer.gameStatus()) + depth;
     }
     if (!passed) {
         dealer.setAsLeader();
         npass = 0;
     }
+    // if (((depth + 1) % 6 == 0 && dealer.playerInTurn().getName() != "Enemy") || ((depth + 1) % 6 != 0 && dealer.playerInTurn().getName() == "Me")) {
+    //     dealer.nextPlayer();
+    // }
     dealer.nextPlayer();
-
     vector<pair<CardSet, long double>> cardsetsAndCosts;
-    const vector<CardSet> followableCardset = getFollowableCardsets(dealer.gameStatus(), dealer.playerInTurn().inHand());
+    const vector<CardSet> followableCardset = getFollowableCardsets(dealer.gameStatus(), dealer.playerInTurn().inHand(), true);
     for (const CardSet &cardSet : followableCardset) {
         cardsetsAndCosts.emplace_back(cardSet, 0.0);
     }
     for (pair<CardSet, long double> &cardsetAndCost : cardsetsAndCosts) {
         cardsetAndCost.second = beamSearch(dealer, cardsetAndCost.first, passed, npass, depth + 1);
+    }
+    if (cardsetsAndCosts.empty()) {
+        // return 0.0;
+        return evaluate(dealer.gameStatus()) + depth;
     }
     long double cost = accumulate(cardsetsAndCosts.begin(), cardsetsAndCosts.end(), 0.0, [](const long double &accumulation, const pair<CardSet, long double> &cardsetAndCost) { return accumulation + cardsetAndCost.second; }) / cardsetsAndCosts.size();
     return cost;
@@ -125,7 +140,7 @@ long double Group5::evaluate(const GameStatus &gstat) {
     long double cost = 0.0;
     for (int i = 0; i < gstat.numParticipants; i++) {
         if (gstat.playerName[i] == "Me") {
-            cost += gstat.numCards[i];
+            cost += gstat.numCards[i] * 5.0;
         }
         else {
             cost -= gstat.numCards[i];
@@ -134,11 +149,13 @@ long double Group5::evaluate(const GameStatus &gstat) {
     return cost;
 }
 
-vector<CardSet> Group5::getFollowableCardsets(const GameStatus &gstat, const CardSet &inHand) {
+vector<CardSet> Group5::getFollowableCardsets(const GameStatus &gstat, const CardSet &inHand, const bool &withoutNoCard) {
     vector<CardSet> followableCardsets;
     vector<CardSet> bucketsOfCardset(14);
-    CardSet cardSet;
-    followableCardsets.emplace_back(cardSet);
+    if (!withoutNoCard) {
+        CardSet cardSet;
+        followableCardsets.emplace_back(cardSet);
+    }
     for (int i = 0; i < inHand.size(); i++) {
         if (!inHand.at(i).isJoker()) {
             bucketsOfCardset.at(inHand.at(i).getRank()).insert(inHand.at(i));
@@ -147,28 +164,50 @@ vector<CardSet> Group5::getFollowableCardsets(const GameStatus &gstat, const Car
             bucketsOfCardset.front().insert(inHand.at(i));
         }
     }
-    for (int i = 1; i < bucketsOfCardset.size(); i++) {
-        if (!bucketsOfCardset.at(i).isEmpty()) {
-            bool isGreaterThan = false;
-            for (int j = 0; j < gstat.pile.size(); j++) {
-                isGreaterThan |= bucketsOfCardset.at(i).at(0).isGreaterThan(gstat.pile.at(j));
-            }
-            if (isGreaterThan) {
-                if (bucketsOfCardset.at(i).size() >= gstat.pile.size()) {
-                    CardSet cardSet;
-                    for (int j = 0; j < gstat.pile.size(); j++) {
-                        cardSet.insert(bucketsOfCardset.at(i).at(j));
-                    }
-                    followableCardsets.emplace_back(cardSet);
+    if (gstat.pile.isEmpty()) {
+        for (int i = 1; i < bucketsOfCardset.size(); i++) {
+            for (int j = 1; j <= bucketsOfCardset.at(i).size(); j++) {
+                CardSet cardSet;
+                for (int k = 0; k < j; k++) {
+                    cardSet.insert(bucketsOfCardset.at(i).at(k));
                 }
-                if (!bucketsOfCardset.front().isEmpty()) {
-                    if (gstat.pile.size() >= 2 && bucketsOfCardset.at(i).size() >= gstat.pile.size() - 1) {
+                followableCardsets.emplace_back(cardSet);
+            }
+            if (!bucketsOfCardset.front().isEmpty()) {
+                for (int j = 1; j <= min(bucketsOfCardset.at(i).size(), 3); j++) {
+                    CardSet cardSet;
+                    for (int k = 0; k < j; k++) {
+                        cardSet.insert(bucketsOfCardset.at(i).at(k));
+                    }
+                    cardSet.insert(bucketsOfCardset.front().at(0));
+                }
+            }
+        }
+    }
+    else {
+        for (int i = 1; i < bucketsOfCardset.size(); i++) {
+            if (!bucketsOfCardset.at(i).isEmpty()) {
+                bool isGreaterThan = false;
+                for (int j = 0; j < gstat.pile.size(); j++) {
+                    isGreaterThan |= bucketsOfCardset.at(i).at(0).isGreaterThan(gstat.pile.at(j));
+                }
+                if (isGreaterThan) {
+                    if (bucketsOfCardset.at(i).size() >= gstat.pile.size()) {
                         CardSet cardSet;
-                        for (int j = 0; j < gstat.pile.size() - 1; j++) {
+                        for (int j = 0; j < gstat.pile.size(); j++) {
                             cardSet.insert(bucketsOfCardset.at(i).at(j));
                         }
-                        cardSet.insert(bucketsOfCardset.front().at(0));
                         followableCardsets.emplace_back(cardSet);
+                    }
+                    if (!bucketsOfCardset.front().isEmpty()) {
+                        if (gstat.pile.size() >= 2 && bucketsOfCardset.at(i).size() >= gstat.pile.size() - 1) {
+                            CardSet cardSet;
+                            for (int j = 0; j < gstat.pile.size() - 1; j++) {
+                                cardSet.insert(bucketsOfCardset.at(i).at(j));
+                            }
+                            cardSet.insert(bucketsOfCardset.front().at(0));
+                            followableCardsets.emplace_back(cardSet);
+                        }
                     }
                 }
             }
@@ -184,7 +223,7 @@ vector<CardSet> Group5::getFollowableCardsets(const GameStatus &gstat, const Car
 
 int Group5Dealer::verbose = false;
 
-Group5Dealer::Group5Dealer() {
+Group5Dealer::Group5Dealer() : players(maxNumOfPlayers), id2player(maxNumOfPlayers), score(maxNumOfPlayers, vector<int>(maxNumOfPlayers + 1)), dupHands(maxNumOfPlayers) {
     numberOfPlayingPlayers = 0;
     numberOfParticipants = 0;
     turn = 0;
@@ -199,20 +238,20 @@ Group5Dealer::Group5Dealer() {
     return;
 }
 
-bool Group5Dealer::regist(Player * pl) {
+bool Group5Dealer::regist(Player pl) {
   //  std::cerr << "### registering of " << pl->playerName() << std::endl;
   //  std::cerr << "nop=" << numberOfParticipants << ",max=" << maxNumOfPlayers << std::endl;
   
-  std::cerr << "Registering Player of " << pl->playerName() << " ... ";
+  std::cerr << "Registering Player of " << pl.playerName() << " ... ";
 
     if (numberOfParticipants >= maxNumOfPlayers) {
       std::cerr << "Error: player registration exceeding the limit (" 
                 << maxNumOfPlayers << ")." << std::endl;
       return false;
     }
+    pl.setId(numberOfParticipants);
     players[numberOfParticipants] = pl;
     id2player[numberOfParticipants] = pl;
-    pl->setId(numberOfParticipants);
     numberOfParticipants++;
     pauper = 0;
     noMillionaire = true;
@@ -222,7 +261,7 @@ bool Group5Dealer::regist(Player * pl) {
 }
 
 Player & Group5Dealer::currentLeader() {
-    return * players[leaderIndex];
+    return players[leaderIndex];
 }
 
 bool Group5Dealer::playerInTurnIsLeader() {
@@ -234,7 +273,7 @@ void Group5Dealer::newGame() {
     if ( !noMillionaire )
         pauper = 0;
     for (int i = 0; i < numberOfParticipants; i++){
-      players[i]->clearHand();
+      players[i].clearHand();
       //      players[i]->ready();
       dupHands[i].makeEmpty();
     }
@@ -259,7 +298,7 @@ bool Group5Dealer::deal(int c) {
     Card top;
 
     for (int p = 0; p < numberOfParticipants ; p++) {
-        players[p]->clearHand();
+        players[p].clearHand();
     }
     theDeck.setupDeck();
     theDeck.shuffle();
@@ -268,8 +307,8 @@ bool Group5Dealer::deal(int c) {
             if ( theDeck.isEmpty() )
                 break;
             theDeck.draw(top, 0);
-            players[ (numberOfPlayingPlayers - 1 - p) % numberOfPlayingPlayers]->takeCards(top);
-            dupHands[players[(numberOfPlayingPlayers - 1 - p) % numberOfPlayingPlayers]->getId()].insert(top);
+            players[ (numberOfPlayingPlayers - 1 - p) % numberOfPlayingPlayers].takeCards(top);
+            dupHands[players[(numberOfPlayingPlayers - 1 - p) % numberOfPlayingPlayers].getId()].insert(top);
         }
     }
     //    turn = 0;
@@ -291,9 +330,9 @@ const CardSet & Group5Dealer::discardPile() {
 bool Group5Dealer::accept(CardSet & opened) {
         Card openedRank;
 
-    if (! opened.subsetof(dupHands[players[turn]->getId()])) {
+    if (! opened.subsetof(dupHands[players[turn].getId()])) {
       std::cout << "\t!!! You don't have " << opened
-                << "in your hand of " << dupHands[players[turn]->getId()];
+                << "in your hand of " << dupHands[players[turn].getId()];
       return false;
     }
 
@@ -317,7 +356,7 @@ bool Group5Dealer::accept(CardSet & opened) {
 
     discarded.makeEmpty();
     discarded.insert(opened);
-    dupHands[players[turn]->getId()].remove(opened);
+    dupHands[players[turn].getId()].remove(opened);
     opened.makeEmpty();
     discardedRank=openedRank;
 
@@ -348,13 +387,13 @@ bool Group5Dealer::checkRankUniqueness(CardSet & cs) {
 void Group5Dealer::showDiscardedToPlayers() {
     GameStatus gstat = gameStatus();
     for (int i = 0; i < numberOfPlayingPlayers; i++) {
-        players[(turn + i) % numberOfPlayingPlayers]->approve(gstat);
+        players[(turn + i) % numberOfPlayingPlayers].approve(gstat);
     }
     return; 
 }
 
 void Group5Dealer::withdrawPlayer(int i) {
-    Player * p;
+    Player p;
     p = players[i];
     for ( ; i+1 < numberOfPlayingPlayers; i++) {
         players[i] = players[i+1];
@@ -389,7 +428,7 @@ Player & Group5Dealer::playerInTurnFinished() {
         }
         // 次の１行をコメントアウトすると 都落ちなし
         // noMillionaire = false;
-        return *players[pauper];
+        return players[pauper];
     }
     withdrawPlayer(turn);
     show();
@@ -398,7 +437,7 @@ Player & Group5Dealer::playerInTurnFinished() {
 
 
 Player & Group5Dealer::player(int i) {
-    return *players[i];
+    return players[i];
 }
 
 
@@ -407,12 +446,12 @@ int Group5Dealer::numberOfFinishedPlayers() {
 }
 
 Player & Group5Dealer::playerInTurn() {
-    return * players[turn];
+    return players[turn];
 }
 
 Player & Group5Dealer::nextPlayer() {
     turn = (turn+1) % numberOfPlayingPlayers;
-    return * players[turn];
+    return players[turn];
 }
 
 void Group5Dealer::show() {
@@ -424,26 +463,26 @@ void Group5Dealer::show() {
       std::cout << "* ";
     else 
       std::cout << "  ";
-    std::cout << players[p]->toString() << std::endl;
-    if (! players[p]->inHand().equal(dupHands[players[p]->getId()])) {
-      std::cout << "*** error: " << players[p]->getName()
+    std::cout << players[p].toString() << std::endl;
+    if (! players[p].inHand().equal(dupHands[players[p].getId()])) {
+      std::cout << "*** error: " << players[p].getName()
                 << "'s hand is different from the real hand. ***" << std::endl;
-      std::cout << "   (real) : " << dupHands[players[p]->getId()] << std::endl << std::endl;
+      std::cout << "   (real) : " << dupHands[players[p].getId()] << std::endl << std::endl;
     }
   }
   std::cout << "===========" << std::endl << std::endl;
 }
 
 void Group5Dealer::putBackOpened(CardSet & opened) {
-  CardSet cs = opened.intersection(dupHands[players[turn]->getId()]);
-  players[turn]->takeCards(cs);
+  CardSet cs = opened.intersection(dupHands[players[turn].getId()]);
+  players[turn].takeCards(cs);
 }
 
 ////////////////////////////////////////////////////////////////////////
 void Group5Dealer::updateScore() {
   int id, n = howManyParticipants();
   for (int i = 0; i < n; i++) {
-    id = players[n - 1 - i]->getId();
+    id = players[n - 1 - i].getId();
     // score[id][0] += (n - i);
     // score[id][0] += (n - i) * (n - i);
     score[id][0] += (i == 0) ? n + 1 : n - i;
@@ -455,8 +494,8 @@ void Group5Dealer::updateScore() {
 void Group5Dealer::printScore() {
   std::cout << "### Score ###" << std::endl;
   for (int i = 0; i < howManyParticipants(); i++) {
-    std::cout << id2player[i]->playerName() << ": "
-              << score[id2player[i]->getId()][0] << std::endl;
+    std::cout << id2player[i].playerName() << ": "
+              << score[id2player[i].getId()][0] << std::endl;
   }
 }
 
@@ -469,7 +508,7 @@ void Group5Dealer::printResult() {
 
   for (i = n - 1; i > 0; i--) {
     for (j = 0; j < i; j++) {
-      if (score[id2player[tbl[j]]->getId()][0] < score[id2player[tbl[j+1]]->getId()][0]) {
+      if (score[id2player[tbl[j]].getId()][0] < score[id2player[tbl[j+1]].getId()][0]) {
         tmp = tbl[j];
         tbl[j] = tbl[j+1];
         tbl[j+1] = tmp;
@@ -494,10 +533,10 @@ void Group5Dealer::printResult() {
   std::cerr << std::endl;
 
   for (i = 0; i < n; i++) {
-    id = id2player[tbl[i]]->getId();
+    id = id2player[tbl[i]].getId();
     std::cerr << (i+1)
               << ((i == 0) ? "st" : ((i == 1) ? "nd" : ((i == 2) ? "rd" : "th")))
-              << " place: " << std::setw(8) << id2player[tbl[i]]->playerName() << ": "
+              << " place: " << std::setw(8) << id2player[tbl[i]].playerName() << ": "
               << std::setw(5) << score[id][0] << " : ";
     for (j = 0; j < n; j++) {
       std::cerr << std::setw(4) << score[id][j+1] << " ";
@@ -518,9 +557,9 @@ GameStatus Group5Dealer::gameStatus(void) const {
     gstat.numPlayers = numberOfPlayingPlayers;
     gstat.numParticipants = numberOfParticipants;
     for (int i = 0; i < howManyParticipants(); i++) {
-        gstat.numCards[i] = players[i]->size();
-        gstat.playerID[i] = players[i]->getId();
-        gstat.playerName[i] = players[i]->playerName();
+        gstat.numCards[i] = players[i].size();
+        gstat.playerID[i] = players[i].getId();
+        gstat.playerName[i] = players[i].playerName();
     }
     gstat.leaderIndex = leaderIndex;
     return gstat;

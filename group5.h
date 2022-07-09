@@ -27,7 +27,8 @@ class Group5Dealer {
   Card discardedRank;                 // 現在の場のカードの中の Joker 以外のカードのランク
                                       // ペアしか考えていないので全部同じ数字
     
-  Player *players[maxNumOfPlayers];   // プレイヤへのポインタの配列(10人まで)
+  vector<Player> players;
+//   Player *players[maxNumOfPlayers];   // プレイヤへのポインタの配列(10人まで)
                                       // 先頭から，大貧民，... ，大富豪の順
   int numberOfPlayingPlayers;         // 現在プレイ中のプレイヤの数 (上がったプレイヤは除く)
   int numberOfParticipants;           // 全プレイヤ数
@@ -36,15 +37,18 @@ class Group5Dealer {
   int leaderIndex;                    // リーダとなっているプレイヤの添字
   bool noMillionaire;                 // 大富豪の搾取を行なわないかどうかのフラグ
 
-  Player *id2player[maxNumOfPlayers]; // プレイヤid からプレイヤを取得するためのテーブル
-  int score[maxNumOfPlayers][maxNumOfPlayers+1];  // プレイヤのスコア
-  CardSet dupHands[maxNumOfPlayers];  // 各プレイヤの手札のコピー(チェック用)
+  vector<Player> id2player;
+  vector<vector<int>> score;
+  vector<CardSet> dupHands;
+//   Player *id2player[maxNumOfPlayers]; // プレイヤid からプレイヤを取得するためのテーブル
+//   int score[maxNumOfPlayers][maxNumOfPlayers+1];  // プレイヤのスコア
+//   CardSet dupHands[maxNumOfPlayers];  // 各プレイヤの手札のコピー(チェック用)
 
 public:
   Group5Dealer();
 
   void newGame();
-  bool regist(Player *);              // プレイヤの登録
+  bool regist(Player);                // プレイヤの登録
   bool deal(int);                     // 引数で与えた枚数のカードを配り(*)，turn をリセット
   bool dealAll();                     // 各プレイヤに手札を配布
   void show();                        // 各プレイヤの状況の表示
@@ -123,7 +127,7 @@ protected:
     long double evaluate(const GameStatus &);
 
 protected:
-    vector<CardSet> getFollowableCardsets(const GameStatus &, const CardSet &);
+    vector<CardSet> getFollowableCardsets(const GameStatus &, const CardSet &, const bool &);
 };
 
 #endif
