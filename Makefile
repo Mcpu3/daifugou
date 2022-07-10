@@ -18,13 +18,13 @@ OBJS = dealer.o player.o simpleplayer.o defaultplayer.o group5.o
 	$(CXX) -c $(CXXFLAGS) $<
 
 .cpp.o: $(HEADERS)
-	$(CXX) -c $(CXXFLAGS) $<
+	$(CXX) -c $(CXXFLAGS) $< 
 
 all: daifugou
 	@echo "build finished."
 
 daifugou: daifugou.o $(OBJS) $(HEADERS) libplayingcards.a
-	$(CXX) daifugou.o $(OBJS) -o daifugou -L. -lplayingcards
+	$(CXX) daifugou.o $(OBJS) -o daifugou -L. -lplayingcards -lpthread
 
 lib: libplayingcards.a
 

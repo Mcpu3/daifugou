@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <future>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
@@ -37,15 +38,24 @@ void Group5::ready() {
 bool Group5::follow(const GameStatus &gstat, CardSet &cs) {
     vector<pair<CardSet, long double>> cardsetsAndCosts;
     const vector<CardSet> followableCardset = getFollowableCardsets(gstat, hand, false);
-    for (const CardSet &cardSet : followableCardset) {
-        cardsetsAndCosts.emplace_back(cardSet, 0.0);
-    }
     if (dealer.playerInTurn().getName() == "Enemy") {
         dealer.nextPlayer();
     }
-    for (pair<CardSet, long double> &cardsetAndCost : cardsetsAndCosts) {
-        cardsetAndCost.second = beamSearch(dealer, cardsetAndCost.first, passed, npass, 0);
+    vector<future<long double>> costs;
+    for (const CardSet &cardSet : followableCardset) {
+        cardsetsAndCosts.emplace_back(cardSet, 0.0);
+        costs.emplace_back(async(launch::async, [&, this]() { return beamSearch(dealer, cardSet, passed, npass, 0); }));
     }
+    for (int i = 0; i < cardsetsAndCosts.size(); i++) {
+        cardsetsAndCosts.at(i).second = costs.at(i).get();
+    }
+
+    // シングルスレッド
+
+    // for (future<pair<CardSet, long double>> &cardsetAndCost : cardsetsAndCosts) {
+    //     cardsetAndCost.second = beamSearch(dealer, cardsetAndCost.first, passed, npass, 0);
+    // }
+
     sort(cardsetsAndCosts.begin(), cardsetsAndCosts.end(), [](const pair<CardSet, long double> &a, const pair<CardSet, long double> &b) { return a.second < b.second; });
     cs.insert(cardsetsAndCosts.front().first);
     hand.remove(cardsetsAndCosts.front().first);
@@ -81,12 +91,6 @@ bool Group5::approve(const GameStatus &gstat) {
 }
 
 long double Group5::beamSearch(Group5Dealer dealer, CardSet opened, bool passed, int npass, const int &depth) {
-    // if (depth >= 50) {
-    //     return evaluate(dealer.gameStatus()) + depth;
-    // }
-    if (npass >= dealer.howManyPlayers() * 5) {
-        return evaluate(dealer.gameStatus());
-    }
     if (passed && dealer.playerInTurnIsLeader()) {
         dealer.clearDiscardPile();
     }
@@ -104,22 +108,21 @@ long double Group5::beamSearch(Group5Dealer dealer, CardSet opened, bool passed,
         passed = false;
     }
     if (dealer.playerInTurn().isEmptyHanded() && dealer.isEmptyHanded(dealer.playerInTurn().getId())) {
-        // if (dealer.playerInTurn().getName() == "Me") {
-        //     return depth;
-        // }
-        // else {
-        //     return 0;
-        // }
-        return evaluate(dealer.gameStatus()) + depth;
+        if (dealer.playerInTurn().getName() == "Me") {
+            return evaluate(dealer) + depth;
+        }
+        else {
+            return evaluate(dealer) + max(53.0 - depth, 0.0);
+        }
     }
     if (!passed) {
         dealer.setAsLeader();
         npass = 0;
     }
-    // if (((depth + 1) % 6 == 0 && dealer.playerInTurn().getName() != "Enemy") || ((depth + 1) % 6 != 0 && dealer.playerInTurn().getName() == "Me")) {
+    dealer.nextPlayer();
+    // if (((depth + 1) % 6 == 0 && dealer.playerInTurn().getName() == "Enemy") || ((depth + 1) % 6 != 0 && dealer.playerInTurn().getName() == "Me")) {
     //     dealer.nextPlayer();
     // }
-    dealer.nextPlayer();
     vector<pair<CardSet, long double>> cardsetsAndCosts;
     const vector<CardSet> followableCardset = getFollowableCardsets(dealer.gameStatus(), dealer.playerInTurn().inHand(), true);
     for (const CardSet &cardSet : followableCardset) {
@@ -129,22 +132,19 @@ long double Group5::beamSearch(Group5Dealer dealer, CardSet opened, bool passed,
         cardsetAndCost.second = beamSearch(dealer, cardsetAndCost.first, passed, npass, depth + 1);
     }
     if (cardsetsAndCosts.empty()) {
-        // return 0.0;
-        return evaluate(dealer.gameStatus()) + depth;
+        return evaluate(dealer) + depth;
     }
     long double cost = accumulate(cardsetsAndCosts.begin(), cardsetsAndCosts.end(), 0.0, [](const long double &accumulation, const pair<CardSet, long double> &cardsetAndCost) { return accumulation + cardsetAndCost.second; }) / cardsetsAndCosts.size();
     return cost;
 }
 
-long double Group5::evaluate(const GameStatus &gstat) {
+long double Group5::evaluate(Group5Dealer dealer) {
     long double cost = 0.0;
-    for (int i = 0; i < gstat.numParticipants; i++) {
-        if (gstat.playerName[i] == "Me") {
-            cost += gstat.numCards[i] * 5.0;
-        }
-        else {
-            cost -= gstat.numCards[i];
-        }
+    for (int i = 0; i < dealer.player(0).inHand().size(); i++) {
+        cost += 16.0 - dealer.player(0).inHand().at(i).strength();
+    }
+    for (int i = 0; i < dealer.player(1).inHand().size(); i++) {
+        cost -= (16.0 - dealer.player(0).inHand().at(i).strength()) / 5.0;
     }
     return cost;
 }
@@ -331,8 +331,8 @@ bool Group5Dealer::accept(CardSet & opened) {
         Card openedRank;
 
     if (! opened.subsetof(dupHands[players[turn].getId()])) {
-      std::cout << "\t!!! You don't have " << opened
-                << "in your hand of " << dupHands[players[turn].getId()];
+    //   std::cout << "\t!!! You don't have " << opened
+                // << "in your hand of " << dupHands[players[turn].getId()];
       return false;
     }
 

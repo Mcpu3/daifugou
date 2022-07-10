@@ -2,6 +2,7 @@
 #define _GROUP5_H_
 
 #include <algorithm>
+#include <future>
 #include <iomanip>
 #include <iostream>
 #include <numeric>
@@ -124,7 +125,7 @@ protected:
     long double beamSearch(Group5Dealer, CardSet, bool, int, const int &);
 
 protected:
-    long double evaluate(const GameStatus &);
+    long double evaluate(Group5Dealer);
 
 protected:
     vector<CardSet> getFollowableCardsets(const GameStatus &, const CardSet &, const bool &);
