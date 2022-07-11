@@ -44,7 +44,7 @@ bool Group5::follow(const GameStatus &gstat, CardSet &cs) {
     vector<future<long double>> costs;
     for (const CardSet &cardSet : followableCardset) {
         cardsetsAndCosts.emplace_back(cardSet, 0.0);
-        costs.emplace_back(async(launch::async, [&, this]() { return depthFirstSearch(gstat, dealer, cardSet, passed, 0); }));
+        costs.emplace_back(async(launch::async, [&, this]() { return depthFirstSearch(gstat, dealer, cardSet, passed); }));
     }
     for (int i = 0; i < cardsetsAndCosts.size(); i++) {
         cardsetsAndCosts.at(i).second = costs.at(i).get();
@@ -90,7 +90,7 @@ bool Group5::approve(const GameStatus &gstat) {
     return true;
 }
 
-long double Group5::depthFirstSearch(const GameStatus &gstat, Group5Dealer dealer, CardSet opened, bool passed, const int &depth) {
+long double Group5::depthFirstSearch(const GameStatus &gstat, Group5Dealer dealer, CardSet opened, bool passed) {
     if (passed && dealer.playerInTurnIsLeader()) {
         dealer.clearDiscardPile();
     }
@@ -112,16 +112,14 @@ long double Group5::depthFirstSearch(const GameStatus &gstat, Group5Dealer deale
     if (!passed) {
         dealer.setAsLeader();
     }
-    if (((depth + 1) % gstat.numParticipants == 0 && dealer.playerInTurn().getName() == "Enemy") || ((depth + 1) % gstat.numParticipants != 0 && dealer.playerInTurn().getName() == "Me")) {
-        dealer.nextPlayer();
-    }
+    dealer.nextPlayer();
     vector<pair<CardSet, long double>> cardsetsAndCosts;
     const vector<CardSet> followableCardset = getFollowableCardsets(dealer.gameStatus(), dealer.playerInTurn().inHand(), true);
     for (const CardSet &cardSet : followableCardset) {
         cardsetsAndCosts.emplace_back(cardSet, 0.0);
     }
     for (pair<CardSet, long double> &cardsetAndCost : cardsetsAndCosts) {
-        cardsetAndCost.second = depthFirstSearch(gstat, dealer, cardsetAndCost.first, passed, depth + 1);
+        cardsetAndCost.second = depthFirstSearch(gstat, dealer, cardsetAndCost.first, passed);
     }
     if (cardsetsAndCosts.empty()) {
         return evaluate(dealer);
@@ -134,6 +132,9 @@ long double Group5::evaluate(Group5Dealer dealer) {
     long double cost = 0.0;
     for (int i = 0; i < dealer.player(0).inHand().size(); i++) {
         cost += 16.0 - dealer.player(0).inHand().at(i).strength();
+    }
+    for (int i = 0; i < dealer.player(1).inHand().size(); i++) {
+        cost -= 16.0 - dealer.player(1).inHand().at(i).strength();
     }
     return cost;
 }

@@ -122,7 +122,7 @@ public:
     bool approve(const GameStatus &);
 
 protected:
-    long double depthFirstSearch(const GameStatus &, Group5Dealer, CardSet, bool, const int &);
+    long double depthFirstSearch(const GameStatus &, Group5Dealer, CardSet, bool);
 
 protected:
     long double evaluate(Group5Dealer);
